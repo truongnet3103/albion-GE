@@ -99,7 +99,7 @@ with t_check:
             if not api_key:
                 st.error("❌ Không tìm thấy API trên Firebase.")
             else:
-                with st.spinner("AI Gemini 2.5 đang đọc danh sách..."):
+                with st.spinner("AI đang đọc danh sách..."):
                     try:
                         genai.configure(api_key=api_key)
                         model = genai.GenerativeModel('gemini-2.5-flash')
