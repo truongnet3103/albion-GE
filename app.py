@@ -18,40 +18,42 @@ if not firebase_admin._apps:
         cred = credentials.Certificate(secret_dict)
         firebase_admin.initialize_app(cred)
     except Exception as e:
-        st.error(f"❌ Lỗi Firebase: {e}")
+        st.error(f"❌ Lỗi Secrets Firebase: {e}")
 
 db = firestore.client()
 
-# --- 3. SIDEBAR: API KEY & MỐC CTA ---
-# Lấy API mặc định từ JSON Secrets (nếu có)
+# --- 3. SIDEBAR (API & MỐC CTA) ---
 json_key = st.secrets.get("gemini", {}).get("api_key", "")
 
 with st.sidebar:
     st.title("🛡️ Admin Panel")
     
-    st.subheader("🔑 Gemini 1.5 Flash Key")
+    st.subheader("🔑 Gemini 2.5 Flash Key")
+    # Ô nhập Key để thay đổi nóng khi hết quota
     active_key = st.text_input(
-        "Dán API Key mới tại đây:", 
+        "Nhập API Key mới tại đây:", 
         type="password", 
         value=st.session_state.get('current_key', json_key),
-        help="Khi báo lỗi 429 (Hết Quota), hãy dán Key mới vào đây."
+        help="Sử dụng Gemini 2.5 Flash để có hiệu suất tốt nhất."
     )
     st.session_state['current_key'] = active_key
 
     st.divider()
     
-    st.subheader("📅 Mốc CTA")
-    new_cta = st.text_input("Tạo mốc (vd: 18UTC-01/03)")
-    if st.button("Tạo"):
+    st.subheader("📅 Mốc thời gian CTA")
+    new_cta = st.text_input("Tên mốc mới (vd: 18UTC-01/03)")
+    if st.button("Tạo mốc"):
         if new_cta:
             db.collection("cta_events").document(new_cta).set({
                 "name": new_cta,
                 "created_at": firestore.SERVER_TIMESTAMP
             })
+            st.success(f"✅ Đã tạo mốc {new_cta}")
             st.rerun()
 
+    # Chọn mốc làm việc
     try:
-        cta_docs = db.collection("cta_events").order_by("created_at", direction=firestore.Query.DESCENDING).limit(15).stream()
+        cta_docs = db.collection("cta_events").order_by("created_at", direction=firestore.Query.DESCENDING).limit(20).stream()
         cta_list = [d.id for d in cta_docs]
         selected_cta = st.selectbox("Chọn mốc làm việc:", cta_list) if cta_list else "Chưa có mốc"
     except:
@@ -60,72 +62,56 @@ with st.sidebar:
 # --- 4. GIAO DIỆN CHÍNH ---
 tab_manual, tab_members, tab_summary = st.tabs(["📝 Manual (AI)", "👥 Thành Viên", "📊 Tổng Kết"])
 
+# --- TAB 1: MANUAL (CHỨC NĂNG CHÍNH) ---
 with tab_manual:
-    st.info(f"📍 Đang check: **{selected_cta}**")
-    uploaded_file = st.file_uploader("📸 Tải ảnh Party List", type=["jpg", "png", "jpeg"])
+    st.info(f"📍 Đang ghi nhận cho mốc: **{selected_cta}**")
+    
+    uploaded_file = st.file_uploader("📸 Tải hoặc Dán ảnh Party List", type=["jpg", "png", "jpeg"])
     
     if uploaded_file:
         img = Image.open(uploaded_file)
-        st.image(img, caption="Ảnh chờ AI đọc", width=450)
+        st.image(img, caption="Ảnh đang chờ xử lý", width=500)
         
-        if st.button("🪄 Phân tích với Gemini 1.5 Flash"):
+        if st.button("🪄 Phân tích với Gemini 2.5 Flash"):
             if not st.session_state.get('current_key'):
-                st.error("Chưa có API Key!")
+                st.error("❌ Vui lòng nhập API Key ở Sidebar!")
             else:
-                with st.spinner("Đang đọc dữ liệu..."):
+                with st.spinner("🤖 AI Gemini 2.5 đang đọc danh sách..."):
                     try:
-                        # Cấu hình Model 1.5 Flash
+                        # Cấu hình Model 2.5 Flash
                         genai.configure(api_key=st.session_state['current_key'])
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         
-                        # Prompt cực ngắn để tiết kiệm Token
-                        prompt = "Extract IGN and Role (Tank, Healer, Melee, Ranged, Support) from this Albion party list. Return ONLY JSON array: [{'name': '...', 'role': '...'}]"
+                        prompt = """
+                        Phân tích ảnh Party List Albion Online. 
+                        Trích xuất: Character Name (IGN) và Role.
+                        Roles: Tank, Healer, Melee, Ranged, Support.
+                        Trả về duy nhất định dạng JSON mảng: [{"name": "Tên", "role": "Role"}]
+                        """
                         
                         response = model.generate_content([prompt, img])
                         
-                        # Làm sạch code JSON
+                        # Làm sạch chuỗi trả về
                         clean_text = response.text.replace('```json', '').replace('```', '').strip()
                         json_match = re.search(r'\[.*\]', clean_text, re.DOTALL)
                         
                         if json_match:
                             st.session_state['raw_data'] = json.loads(json_match.group())
-                            st.success("✅ Đã đọc xong!")
+                            st.success("✅ Đã trích xuất xong!")
                         else:
-                            st.error("AI không tìm thấy data. Thử ảnh khác rõ hơn.")
+                            st.error("AI không tìm thấy danh sách. Hãy thử ảnh rõ hơn.")
                     except Exception as e:
                         if "429" in str(e):
-                            st.error("❌ Key này đã hết Quota! Hãy thay Key mới ở Sidebar.")
+                            st.error("❌ Hết Quota! Vui lòng thay API Key khác ở Sidebar.")
+                        elif "404" in str(e):
+                            st.error("❌ Lỗi 404: Model 'gemini-2.5-flash' chưa khả dụng hoặc sai tên. Hãy kiểm tra lại vùng quốc gia của API Key.")
                         else:
-                            st.error(f"❌ Lỗi AI: {e}")
+                            st.error(f"❌ Lỗi: {e}")
 
     # Bảng chỉnh sửa và lưu
     if 'raw_data' in st.session_state:
-        edited_list = st.data_editor(st.session_state['raw_data'], num_rows="dynamic")
+        st.subheader("🔍 Kết quả dự đoán")
+        edited_list = st.data_editor(st.session_state['raw_data'], num_rows="dynamic", key="cta_editor_v2")
         
-        if st.button("💾 Lưu vào Firebase"):
-            if selected_cta == "Chưa có mốc":
-                st.error("Hãy tạo mốc CTA trước!")
-            else:
-                batch = db.batch()
-                for item in edited_list:
-                    # Lưu Attendance
-                    att_ref = db.collection("cta_attendance").document(f"{selected_cta}_{item['name']}")
-                    batch.set(att_ref, {"cta_id": selected_cta, "name": item['name'], "role": item['role'], "timestamp": firestore.SERVER_TIMESTAMP})
-                    # Cập nhật Member Master
-                    mem_ref = db.collection("members").document(item['name'])
-                    batch.set(mem_ref, {"name": item['name'], "last_role": item['role'], "last_active": firestore.SERVER_TIMESTAMP}, merge=True)
-                
-                batch.commit()
-                st.success("🔥 Đã đồng bộ thành công!")
-                del st.session_state['raw_data']
-
-# --- TAB 2 & 3 ---
-with tab_members:
-    try:
-        members = db.collection("members").order_by("name").stream()
-        data = [m.to_dict() for m in members]
-        if data: st.dataframe(data, use_container_width=True)
-    except: st.write("Chưa có dữ liệu.")
-
-with tab_summary:
-    st.write("Bảng tổng kết chuyên cần sẽ hiển thị ở đây.")
+        if st.button("💾 Xác nhận & Lưu Firebase"):
+            if selected_cta in ["Chưa có mốc", "
