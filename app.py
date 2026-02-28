@@ -10,7 +10,7 @@ from datetime import datetime
 
 # --- 1. CẤU HÌNH UI & THEME ---
 st.set_page_config(
-    page_title="GE Guild Admin - TRUONGNET", 
+    page_title="GE Guild Admin", 
     layout="wide", 
     page_icon="⚔️"
 )
@@ -83,7 +83,7 @@ with st.sidebar:
         else:
             try:
                 genai.configure(api_key=current_key)
-                m = genai.GenerativeModel('gemini-1.5-flash')
+                m = genai.GenerativeModel('gemini-2.5-flash')
                 m.generate_content("hi", generation_config={"max_output_tokens": 1})
                 st.success("✅ AI sẵn sàng hoạt động!")
             except Exception as e:
@@ -139,7 +139,7 @@ with t_check:
                 with st.spinner("AI đang đọc danh sách..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         prompt = "Extract IGN and ONE role: Tank, Healer, Melee, Ranged, Support. Return JSON list: [{'name': '...', 'role': '...'}]"
                         res = model.generate_content([prompt, img])
                         
