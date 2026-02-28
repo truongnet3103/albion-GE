@@ -28,7 +28,7 @@ with st.sidebar:
     
     # Cấu hình AI
     st.subheader("🔑 AI Configuration")
-    api_key = st.text_input("Gemini Key:", type="password", value=st.session_state.get('cur_key', st.secrets.get("gemini", {}).get("api_key", "")))
+    api_key = st.text_input("Key:", type="password", value=st.session_state.get('cur_key', st.secrets.get("gemini", {}).get("api_key", "")))
     st.session_state['cur_key'] = api_key
     
     st.divider()
