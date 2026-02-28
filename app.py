@@ -11,7 +11,7 @@ import base64
 from datetime import datetime
 
 # --- 1. CẤU HÌNH GIAO DIỆN & ẨN GITHUB ---
-st.set_page_config(page_title="GE Guild Admin - TRUONGNET", layout="wide", page_icon="⚔️")
+st.set_page_config(page_title="GE Guild Admin", layout="wide", page_icon="⚔️")
 
 st.markdown("""
     <style>
@@ -243,5 +243,5 @@ with t_summary:
                 rc = pd.Series(roles).value_counts().to_dict()
                 role_summary = ", ".join([f"{k} ({v})" for k, v in rc.items()])
                 status = "ĐẠT" if info.get('count', 0) >= target_cta else "CHƯA ĐẠT"
-                report = f"⚔️ **GE GUILD REPORT** ⚔️\n👤 IGN: **{target_rep}**\n🗓️ Tham gia: {j_date}\n🔥 Tổng lượt: {info.get('count', 0)} ({status})\n📊 Chi tiết Role: {role_summary}\n*Quản lý bởi TruongNET*"
+                report = f"⚔️ **GE GUILD REPORT** ⚔️\n👤 IGN: **{target_rep}**\n🗓️ Tham gia: {j_date}\n🔥 Tổng lượt: {info.get('count', 0)} ({status})\n📊 Chi tiết Role: {role_summary}\n*Quản lý bởi GE*"
                 st.text_area("📋 Copy gửi thành viên:", value=report, height=220)
