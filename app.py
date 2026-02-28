@@ -8,155 +8,161 @@ import re
 import pandas as pd
 from datetime import datetime
 
-# --- 1. CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Albion GE - Admin System", layout="wide", page_icon="⚔️")
+# --- 1. CẤU HÌNH GIAO DIỆN (UI) ---
+st.set_page_config(page_title="GE Guild - Management System", layout="wide", page_icon="🛡️")
 
-# CSS để làm giao diện đẹp hơn
+# Custom CSS cho giao diện chuyên nghiệp
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #262730; border-radius: 5px 5px 0px 0px; color: white; }
-    .stTabs [aria-selected="true"] { background-color: #ff4b4b; }
-    div[data-testid="stExpander"] { border: 1px solid #444; border-radius: 10px; }
+    .stApp { background-color: #0e1117; }
+    [data-testid="stSidebar"] { background-color: #161b22; border-right: 1px solid #30363d; }
+    .stMetric { background-color: #1f2937; padding: 15px; border-radius: 10px; border: 1px solid #374151; }
+    .status-card { padding: 20px; border-radius: 10px; border: 1px solid #30363d; background-color: #0d1117; margin-bottom: 10px; }
+    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; transition: 0.3s; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { 
+        background-color: #161b22; border: 1px solid #30363d; border-radius: 8px 8px 0 0; 
+        padding: 10px 20px; color: #8b949e; 
+    }
+    .stTabs [aria-selected="true"] { background-color: #238636 !important; color: white !important; border: none; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. KHỞI TẠO FIREBASE ---
 if not firebase_admin._apps:
     try:
-        secret_dict = dict(st.secrets["firebase"])
-        if "\\n" in secret_dict["private_key"]:
-            secret_dict["private_key"] = secret_dict["private_key"].replace("\\n", "\n")
-        cred = credentials.Certificate(secret_dict)
+        sd = dict(st.secrets["firebase"])
+        if "\\n" in sd["private_key"]: sd["private_key"] = sd["private_key"].replace("\\n", "\n")
+        cred = credentials.Certificate(sd)
         firebase_admin.initialize_app(cred)
-    except Exception as e:
-        st.error(f"❌ Lỗi Firebase: {e}")
+    except Exception as e: st.error(f"Lỗi Firebase: {e}")
 
 db = firestore.client()
 
-# --- 3. SIDEBAR: CẤU HÌNH ---
-json_key = st.secrets.get("gemini", {}).get("api_key", "")
-
+# --- 3. SIDEBAR: CẤU HÌNH & CHECK API ---
 with st.sidebar:
-    st.title("🛡️ GUILD GE ADMIN")
-    st.subheader("🔑 AI Configuration")
-    active_key = st.text_input("Gemini API Key:", type="password", value=st.session_state.get('current_key', json_key))
-    st.session_state['current_key'] = active_key
+    st.title("🛡️ GE GUILD PANEL")
+    
+    # 🔑 Cấu hình API
+    st.subheader("🔑 AI API Key")
+    api_key = st.text_input("Nhập Gemini Key:", type="password", value=st.session_state.get('cur_key', st.secrets.get("gemini", {}).get("api_key", "")))
+    st.session_state['cur_key'] = api_key
+    
+    if st.button("🔍 Kiểm tra API"):
+        try:
+            genai.configure(api_key=api_key)
+            m = genai.GenerativeModel('gemini-2.5-flash')
+            test = m.generate_content("hi", generation_config={"max_output_tokens": 1})
+            st.success("✅ API hoạt động tốt!")
+        except Exception as e:
+            st.error(f"❌ API Lỗi: {e}")
+
+    st.divider()
+
+    # 🎯 Mức quy định chuyên cần
+    st.subheader("🎯 Chỉ tiêu Chuyên cần")
+    target_cta = st.number_input("Số lượt tối thiểu/tháng:", min_value=1, value=10)
     
     st.divider()
-    st.subheader("📅 Quản lý Mốc Lịch Sử")
-    new_cta = st.text_input("Tên mốc mới (vd: 18UTC-01/03)")
-    if st.button("✨ Tạo mốc dữ liệu"):
-        if new_cta:
-            db.collection("cta_events").document(new_cta).set({"name": new_cta, "created_at": firestore.SERVER_TIMESTAMP})
-            st.success("Đã tạo mốc lưu trữ!")
+    
+    # 📅 Quản lý mốc
+    st.subheader("📅 Mốc dữ liệu")
+    new_m = st.text_input("Tên mốc mới (VD: 18UTC-01/03)")
+    if st.button("✨ Tạo mốc"):
+        if new_m:
+            db.collection("cta_events").document(new_m).set({"name": new_m, "created_at": firestore.SERVER_TIMESTAMP})
             st.rerun()
 
-    try:
-        cta_docs = db.collection("cta_events").order_by("created_at", direction=firestore.Query.DESCENDING).limit(20).stream()
-        cta_list = [d.id for d in cta_docs]
-        selected_cta = st.selectbox("📍 Mốc lưu hiện tại:", cta_list) if cta_list else "Chưa có mốc"
-    except:
-        selected_cta = "Lỗi kết nối"
+    cta_list = [d.id for d in db.collection("cta_events").order_by("created_at", direction=firestore.Query.DESCENDING).limit(20).stream()]
+    sel_cta = st.selectbox("Làm việc với mốc:", cta_list) if cta_list else "None"
 
 # --- 4. GIAO DIỆN CHÍNH ---
-tab_manual, tab_members, tab_history = st.tabs(["🚀 CHECK-IN AI", "👥 THÀNH VIÊN & ĐIỂM", "📂 LỊCH SỬ MỐC"])
+t_check, t_members, t_summary = st.tabs(["🚀 AI SCANNER", "👥 MEMBER LIST", "📊 FINAL REPORT"])
 
-# --- TAB 1: CHECK-IN AI ---
-with tab_manual:
-    st.subheader(f"📸 Quét Party List - Mốc: {selected_cta}")
+# --- TAB 1: AI SCANNER ---
+with t_check:
+    st.subheader(f"📸 Quét Party List - Mốc: {sel_cta}")
+    up = st.file_uploader("Kéo thả ảnh vào đây", type=["jpg", "png", "jpeg"])
     
-    with st.expander("⬆️ Upload hoặc Dán ảnh tại đây", expanded=True):
-        uploaded_file = st.file_uploader("", type=["jpg", "png", "jpeg"])
-    
-    if uploaded_file:
-        img = Image.open(uploaded_file)
-        st.image(img, caption="Ảnh đang chờ xử lý", use_container_width=True)
-        
-        if st.button("🪄 CHẠY AI PHÂN TÍCH (GEMINI 2.5 FLASH)", type="primary"):
-            with st.spinner("🤖 Đang bóc tách dữ liệu nhân vật..."):
+    if up:
+        img = Image.open(up)
+        st.image(img, width=400)
+        if st.button("🪄 PHÂN TÍCH ẢNH", type="primary"):
+            with st.spinner("AI đang làm việc..."):
                 try:
-                    genai.configure(api_key=st.session_state['current_key'])
+                    genai.configure(api_key=st.session_state['cur_key'])
                     model = genai.GenerativeModel('gemini-2.5-flash')
-                    prompt = "Extract Character Name (IGN) and Role (Tank, Healer, Melee, Ranged, Support) from image. Return ONLY JSON array: [{'name': '...', 'role': '...'}]"
-                    response = model.generate_content([prompt, img])
-                    clean_text = response.text.replace('```json', '').replace('```', '').strip()
-                    json_match = re.search(r'\[.*\]', clean_text, re.DOTALL)
-                    if json_match:
-                        st.session_state['raw_data'] = json.loads(json_match.group())
-                        st.success("✅ Đã trích xuất xong!")
-                except Exception as e:
-                    st.error(f"Lỗi: {e}")
+                    prompt = "Return JSON array: [{'name': 'IGN', 'role': 'Tank/Healer/Melee/Ranged/Support'}] from image."
+                    res = model.generate_content([prompt, img])
+                    clean = re.search(r'\[.*\]', res.text.replace('```json', '').replace('```', ''), re.DOTALL)
+                    if clean:
+                        st.session_state['data'] = json.loads(clean.group())
+                        st.success("Xong!")
+                except Exception as e: st.error(f"Lỗi: {e}")
 
-    if 'raw_data' in st.session_state:
-        st.subheader("🔍 Kiểm tra lại danh sách")
-        edited_list = st.data_editor(st.session_state['raw_data'], num_rows="dynamic", use_container_width=True)
-        
-        if st.button("💾 XÁC NHẬN & CỘNG ĐIỂM CHUYÊN CẦN"):
-            if selected_cta == "Chưa có mốc":
-                st.error("Vui lòng tạo mốc ở Sidebar trước!")
-            else:
-                with st.spinner("Đang cập nhật điểm số..."):
-                    batch = db.batch()
-                    for item in edited_list:
-                        # 1. Lưu vào Lịch sử (Để xem lại sau này)
-                        att_ref = db.collection("cta_attendance").document(f"{selected_cta}_{item['name']}")
-                        batch.set(att_ref, {"cta_id": selected_cta, "name": item['name'], "role": item['role'], "timestamp": firestore.SERVER_TIMESTAMP})
-                        
-                        # 2. Cập nhật Master List & Cộng dồn điểm
-                        member_ref = db.collection("members").document(item['name'])
-                        # Dùng Increment của Firestore để cộng dồn số lần tham gia tự động
-                        batch.set(member_ref, {
-                            "name": item['name'],
-                            "last_role": item['role'],
-                            "total_participation": firestore.Increment(1),
-                            "last_active": firestore.SERVER_TIMESTAMP
-                        }, merge=True)
-                    
-                    batch.commit()
-                    st.success(f"🔥 Đã ghi nhận và cộng điểm cho {len(edited_list)} thành viên!")
-                    del st.session_state['raw_data']
+    if 'data' in st.session_state:
+        edited = st.data_editor(st.session_state['data'], num_rows="dynamic", use_container_width=True)
+        if st.button("💾 LƯU DỮ LIỆU & CỘNG ĐIỂM"):
+            batch = db.batch()
+            for i in edited:
+                # Lưu lịch sử
+                batch.set(db.collection("cta_attendance").document(f"{sel_cta}_{i['name']}"), 
+                          {"cta_id": sel_cta, "name": i['name'], "role": i['role'], "ts": firestore.SERVER_TIMESTAMP})
+                # Cộng dồn Member
+                batch.set(db.collection("members").document(i['name']), 
+                          {"name": i['name'], "last_role": i['role'], "count": firestore.Increment(1), "ts": firestore.SERVER_TIMESTAMP}, merge=True)
+                # Lưu chi tiết role để tính tỉ lệ
+                batch.set(db.collection("members").document(i['name']).collection("roles").document(), {"role": i['role']})
+            batch.commit()
+            st.success("Đã cập nhật điểm chuyên cần!")
+            del st.session_state['data']
 
-# --- TAB 2: THÀNH VIÊN & ĐIỂM (CỘNG DỒN) ---
-with tab_members:
-    st.header("👥 Bảng Điểm Chuyên Cần")
-    try:
-        members_stream = db.collection("members").order_by("total_participation", direction=firestore.Query.DESCENDING).stream()
-        member_data = []
-        for m in members_stream:
-            d = m.to_dict()
-            # Đảm bảo có cột participation nếu thành viên cũ chưa có
-            d.setdefault("total_participation", 0)
-            member_data.append({
-                "Tên Nhân Vật (IGN)": d.get("name"),
-                "Tổng Lượt Tham Gia": d.get("total_participation"),
-                "Role Cuối": d.get("last_role"),
-                "Hoạt Động Cuối": d.get("last_active").strftime("%d/%m/%Y %H:%M") if d.get("last_active") else "N/A"
-            })
-        
-        if member_data:
-            df = pd.DataFrame(member_data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            
-            # Xuất Excel bảng điểm
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 Tải bảng điểm (CSV)", data=csv, file_name="Diem_Chuyen_Can_Guild.csv", mime="text/csv")
-        else:
-            st.info("Chưa có thành viên nào.")
-    except Exception as e:
-        st.error(f"Lỗi: {e}")
-
-# --- TAB 3: LỊCH SỬ MỐC (CHỈ ĐỂ XEM LẠI) ---
-with tab_history:
-    st.header("📂 Dữ liệu lưu trữ theo mốc")
-    view_cta = st.selectbox("Chọn mốc muốn xem lại:", cta_list if 'cta_list' in locals() else [])
+# --- TAB 2: MEMBER LIST ---
+with t_members:
+    st.subheader("👥 Danh sách Thành Viên Master")
+    m_docs = db.collection("members").order_by("count", direction=firestore.Query.DESCENDING).stream()
+    m_list = []
+    for m in m_docs:
+        d = m.to_dict()
+        status = "✅ ĐẠT" if d.get("count", 0) >= target_cta else "❌ KHÔNG ĐẠT"
+        m_list.append({"IGN": d.get("name"), "Tổng Lượt": d.get("count", 0), "Chỉ tiêu": status, "Role cuối": d.get("last_role")})
     
-    if view_cta:
-        history_docs = db.collection("cta_attendance").where("cta_id", "==", view_cta).stream()
-        h_data = [{"Tên": h.to_dict().get("name"), "Role": h.to_dict().get("role")} for h in history_docs]
-        if h_data:
-            st.table(h_data)
-        else:
-            st.write("Mốc này chưa có dữ liệu.")
+    if m_list:
+        st.dataframe(pd.DataFrame(m_list), use_container_width=True, hide_index=True)
+
+# --- TAB 3: FINAL REPORT (ĐÁNH GIÁ CHI TIẾT) ---
+with t_summary:
+    st.subheader("📊 Báo cáo đánh giá chi tiết")
+    target_ign = st.selectbox("Chọn người chơi cần xem báo cáo:", [m['IGN'] for m in m_list] if m_list else [])
+    
+    if target_ign:
+        # Lấy data người chơi
+        m_info = db.collection("members").document(target_ign).get().to_dict()
+        role_docs = db.collection("members").document(target_ign).collection("roles").stream()
+        roles = [r.to_dict()['role'] for r in role_docs]
+        
+        c1, c2, c3 = st.columns(3)
+        count = m_info.get("count", 0)
+        c1.metric("Tổng tham gia", f"{count} lượt")
+        c2.metric("Chỉ tiêu", f"{target_cta}", delta=count - target_cta)
+        status_text = "ĐẠT CHỈ TIÊU" if count >= target_cta else "CHƯA ĐẠT"
+        c3.info(f"Trạng thái: **{status_text}**")
+        
+        # Tính tỉ lệ Role
+        if roles:
+            st.write("**Tỉ lệ Role đã chơi:**")
+            role_df = pd.Series(roles).value_counts(normalize=True).mul(100).round(1).astype(str) + '%'
+            st.table(role_df)
+
+            # Chuẩn bị nội dung Copy
+            report_str = f"""⚔️ **BÁO CÁO CTA - GUILD GE** ⚔️
+👤 Người chơi: **{target_ign}**
+🔥 Tổng lượt tham gia: {count}
+🎯 Chỉ tiêu quy định: {target_cta}
+📊 Trạng thái: {status_text}
+🛡️ Tỉ lệ Role: {role_df.to_dict()}
+----------------------------
+*Hãy tiếp tục phát huy cùng Guild nhé!*"""
+            
+            st.text_area("Nội dung gửi Discord/Zalo:", value=report_str, height=180)
+            st.caption("Mẹo: Bôi đen toàn bộ nội dung trên để copy gửi cho người chơi.")
