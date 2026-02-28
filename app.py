@@ -57,7 +57,7 @@ with st.sidebar:
             try:
                 genai.configure(api_key=current_key)
                 # Sử dụng model gemini-1.5-flash vì tính ổn định cao nhất hiện tại
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-2.5-flash')
                 model.generate_content("hi", generation_config={"max_output_tokens": 1})
                 st.success("✅ Hệ thống AI sẵn sàng!")
             except:
